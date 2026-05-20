@@ -3,15 +3,13 @@ from bs4 import BeautifulSoup
 import re
 import json
 import os
-import time
 
-# 🔎 czego szukasz
 keywords = ["amiga", "commodore", "atari", "zx spectrum", "technics", "subwoofer"]
 
-# ❌ śmieci
 blocked = [
-    "koparka", "kosiarka", "mulczer", "ramie", "ramię",
-    "budowlana", "ps3", "playstation", "simulator", "kierownica"
+    "koparka", "kosiarka", "mulczer",
+    "ramie", "ramię", "budowlana",
+    "ps3", "playstation", "simulator", "kierownica"
 ]
 
 TOKEN = "8758184901:AAHAbh8W8tAFFUg9q8RnzJ1s7mQ53UH_QiE"
@@ -53,78 +51,3 @@ def get_price(text):
     return None
 
 
-def is_deal(title, price):
-    t = title.lower()
-
-    keywords = ["okazja", "tanio", "pilne", "sprzedam szybko", "nie znam"]
-
-    if any(k in t for k in keywords):
-        return True
-
-    if price:
-        if "amiga" in t and price < 300:
-            return True
-        if "technics" in t and price < 250:
-            return True
-        if "atari" in t and price < 200:
-            return True
-        if price < 150:
-            return True
-
-    return False
-
-
-def run():
-    seen = load_seen()
-
-    for word in keywords:
-        url = f"https://www.olx.pl/d/oferty/q-{word}/?search%5Border%5D=created_at:desc"
-
-        r = requests.get(url, headers=HEADERS)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        ads = soup.select("a")
-
-        count = 0
-
-        for ad in ads:
-            link = ad.get("href")
-
-            if link and "/d/oferta/" in link:
-                link = "https://www.olx.pl" + link.split("?")[0]
-
-                if link in seen:
-                    continue
-
-                title = ad.text.strip()
-
-                if not is_ok(title):
-                    continue
-
-                price = get_price(title)
-
-                msg = f"🆕 {title}\n"
-
-                if price:
-                    msg += f"💰 {price} PLN\n"
-
-                if is_deal(title, price):
-                    msg += "🔥 OKAZJA !!!\n"
-
-                msg += link
-
-                send(msg)
-
-                seen.add(link)
-
-                count += 1
-
-                if count >= 3:
-                    break
-
-    save_seen(seen)
-
-
-if __name__ == "__main__":
-    run()
-``
