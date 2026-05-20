@@ -23,13 +23,12 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-# ✅ TELEGRAM
+
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 
-# ✅ wczytaj widziane
 def load_seen():
     if not os.path.exists(SEEN_FILE):
         return set()
@@ -37,19 +36,16 @@ def load_seen():
         return set(json.load(f))
 
 
-# ✅ zapisz widziane
 def save_seen(seen):
     with open(SEEN_FILE, "w") as f:
         json.dump(list(seen), f)
 
 
-# ✅ filtr śmieci
 def is_ok(title):
     t = title.lower()
     return not any(word in t for word in blocked)
 
 
-# ✅ WYCIĄGNIJ CENĘ
 def get_price(text):
     numbers = re.findall(r'\d+', text)
     if numbers:
@@ -57,11 +53,9 @@ def get_price(text):
     return None
 
 
-# ✅ czy okazja
 def is_deal(title, price):
     t = title.lower()
 
-    # słowa okazji
     keywords = ["okazja", "tanio", "pilne", "sprzedam szybko", "nie znam"]
 
     if any(k in t for k in keywords):
@@ -80,8 +74,57 @@ def is_deal(title, price):
     return False
 
 
-# 🔥 GŁÓWNA FUNKCJA
 def run():
     seen = load_seen()
 
     for word in keywords:
+        url = f"https://www.olx.pl/d/oferty/q-{word}/?search%5Border%5D=created_at:desc"
+
+        r = requests.get(url, headers=HEADERS)
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        ads = soup.select("a")
+
+        count = 0
+
+        for ad in ads:
+            link = ad.get("href")
+
+            if link and "/d/oferta/" in link:
+                link = "https://www.olx.pl" + link.split("?")[0]
+
+                if link in seen:
+                    continue
+
+                title = ad.text.strip()
+
+                if not is_ok(title):
+                    continue
+
+                price = get_price(title)
+
+                msg = f"🆕 {title}\n"
+
+                if price:
+                    msg += f"💰 {price} PLN\n"
+
+                if is_deal(title, price):
+                    msg += "🔥 OKAZJA !!!\n"
+
+                msg += link
+
+                send(msg)
+
+                seen.add(link)
+
+                count += 1
+
+                if count >= 3:
+                    break
+
+    save_seen(seen)
+
+
+if __name__ == "__main__":
+    run()
+``
