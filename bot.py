@@ -4,8 +4,10 @@ import re
 import json
 import os
 
+# 🔎 wyszukiwania
 keywords = ["amiga", "commodore", "atari", "zx spectrum", "technics", "subwoofer"]
 
+# ❌ śmieci
 blocked = [
     "koparka", "kosiarka", "mulczer",
     "ramie", "ramię", "budowlana",
@@ -22,13 +24,13 @@ HEADERS = {
 }
 
 
-# -------- TELEGRAM --------
+# ✅ TELEGRAM
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 
-# -------- PAMIĘĆ --------
+# ✅ pamięć ogłoszeń
 def load_seen():
     if not os.path.exists(SEEN_FILE):
         return set()
@@ -41,40 +43,50 @@ def save_seen(seen):
         json.dump(list(seen), f)
 
 
-# -------- FILTRY --------
+# ✅ filtr śmieci
 def is_ok(title):
     t = title.lower()
     return not any(word in t for word in blocked)
 
 
-def get_price_from_page(link):
+# ✅ PRAWIDŁOWA CENA Z OGŁOSZENIA (fix błędu!)
+def get_price(link):
     try:
         r = requests.get(link, headers=HEADERS, timeout=5)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        text = soup.get_text(" ", strip=True).lower()
+        # 🔥 kluczowy element OLX
+        price_tag = soup.find(attrs={"data-testid": "ad-price-container"})
 
-        match = re.search(r'(\d{2,6})\s?zł', text)
-        if match:
-            return int(match.group(1))
+        if price_tag:
+            text = price_tag.get_text(" ", strip=True)
+
+            # usuń spacje: 1 050 → 1050
+            text = text.replace(" ", "")
+
+            match = re.search(r"(\d+)", text)
+            if match:
+                return int(match.group(1))
+
     except:
         return None
 
     return None
 
 
+# ✅ wykrywanie okazji (PRO)
 def score_deal(title, price):
     t = title.lower()
     score = 0
 
-    # 🔥 słowa kluczowe
+    # słowa kluczowe
     if "okazja" in t: score += 3
     if "tanio" in t: score += 2
     if "pilne" in t: score += 2
     if "sprzedam szybko" in t: score += 3
     if "nie znam" in t: score += 4
 
-    # 💰 ceny
+    # ceny
     if price:
         if "amiga" in t:
             if price < 300: score += 5
@@ -101,10 +113,10 @@ def classify(score):
     elif score >= 5:
         return "🟢 OKAZJA"
     else:
-        return "⚪ zwykłe"
+        return None   # ❗ nie wysyłamy słabych
 
 
-# -------- GŁÓWNY BOT --------
+# ✅ GŁÓWNY BOT
 def run():
     seen = load_seen()
 
@@ -132,30 +144,30 @@ def run():
                 if not is_ok(title):
                     continue
 
-                price = get_price_from_page(link)
+                price = get_price(link)
 
                 score = score_deal(title, price)
                 label = classify(score)
 
-                msg = f"{label}\n🆕 {title}\n"
+                # ❗ wysyłamy tylko sensowne rzeczy
+                if label:
+                    msg = f"{label}\n🆕 {title}\n"
 
-                if price:
-                    msg += f"💰 {price} PLN\n"
-                else:
-                    msg += "💰 brak ceny\n"
+                    if price:
+                        msg += f"💰 {price} PLN\n"
+                    else:
+                        msg += "💰 brak ceny\n"
 
-                msg += f"⭐ score: {score}\n"
-                msg += link
+                    msg += f"⭐ score: {score}\n"
+                    msg += link
 
-                # 🔥 tylko coś sensownego wysyłamy
-                if score >= 3:
                     send(msg)
 
                 seen.add(link)
 
                 count += 1
 
-                if count >= 4:
+                if count >= 5:
                     break
 
     save_seen(seen)
