@@ -2,7 +2,7 @@ name: OLX Bot
 
 on:
   schedule:
-    - cron: "* * * * *"   # co minutę
+    - cron: "* * * * *"
   workflow_dispatch:
 
 jobs:
