@@ -21,8 +21,9 @@ def send_telegram(msg):
 
 def is_ok(title):
     t = title.lower()
-    if any(word in t for word in blocked):
-        return False
+    for word in blocked:
+        if word in t:
+            return False
     return True
 
 def run():
@@ -47,4 +48,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-``
