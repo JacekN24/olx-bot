@@ -3,11 +3,10 @@ from bs4 import BeautifulSoup
 import re
 import json
 import os
+import time
 
-# 🔎 wyszukiwania
 keywords = ["amiga", "commodore", "atari", "zx spectrum", "technics", "subwoofer"]
 
-# ❌ śmieci
 blocked = [
     "koparka", "kosiarka", "mulczer",
     "ramie", "ramię", "budowlana",
@@ -23,89 +22,61 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0"
 }
 
-
-# ✅ TELEGRAM
 def send(msg):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
-
-# ✅ pamięć ogłoszeń
 def load_seen():
     if not os.path.exists(SEEN_FILE):
         return set()
     with open(SEEN_FILE, "r") as f:
         return set(json.load(f))
 
-
 def save_seen(seen):
     with open(SEEN_FILE, "w") as f:
         json.dump(list(seen), f)
 
-
-# ✅ filtr śmieci
 def is_ok(title):
     t = title.lower()
     return not any(word in t for word in blocked)
 
-
-# ✅ PRAWIDŁOWA CENA Z OGŁOSZENIA (fix błędu!)
 def get_price(link):
     try:
         r = requests.get(link, headers=HEADERS, timeout=5)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # 🔥 kluczowy element OLX
         price_tag = soup.find(attrs={"data-testid": "ad-price-container"})
 
         if price_tag:
             text = price_tag.get_text(" ", strip=True)
-
-            # usuń spacje: 1 050 → 1050
             text = text.replace(" ", "")
 
-            match = re.search(r"(\d+)", text)
+            match = re.search(r"\d+", text)
             if match:
-                return int(match.group(1))
+                return int(match.group())
 
     except:
         return None
 
     return None
 
-
-# ✅ wykrywanie okazji (PRO)
 def score_deal(title, price):
     t = title.lower()
     score = 0
 
-    # słowa kluczowe
     if "okazja" in t: score += 3
     if "tanio" in t: score += 2
     if "pilne" in t: score += 2
-    if "sprzedam szybko" in t: score += 3
     if "nie znam" in t: score += 4
 
-    # ceny
     if price:
-        if "amiga" in t:
-            if price < 300: score += 5
-            if price < 200: score += 8
-
-        if "technics" in t:
-            if price < 250: score += 5
-
-        if "atari" in t:
-            if price < 200: score += 5
-
-        if price < 150:
-            score += 4
-
-        if price < 100:
-            score += 6
+        if "amiga" in t and price < 300: score += 5
+        if "technics" in t and price < 250: score += 5
+        if "atari" in t and price < 200: score += 5
+        if price < 150: score += 4
+        if price < 100: score += 6
 
     return score
-
 
 def classify(score):
     if score >= 8:
@@ -113,10 +84,8 @@ def classify(score):
     elif score >= 5:
         return "🟢 OKAZJA"
     else:
-        return None   # ❗ nie wysyłamy słabych
+        return None
 
-
-# ✅ GŁÓWNY BOT
 def run():
     seen = load_seen()
 
@@ -127,8 +96,6 @@ def run():
         soup = BeautifulSoup(r.text, "html.parser")
 
         ads = soup.select("a")
-
-        count = 0
 
         for ad in ads:
             link = ad.get("href")
@@ -145,11 +112,9 @@ def run():
                     continue
 
                 price = get_price(link)
-
                 score = score_deal(title, price)
                 label = classify(score)
 
-                # ❗ wysyłamy tylko sensowne rzeczy
                 if label:
                     msg = f"{label}\n🆕 {title}\n"
 
@@ -158,20 +123,16 @@ def run():
                     else:
                         msg += "💰 brak ceny\n"
 
-                    msg += f"⭐ score: {score}\n"
-                    msg += link
+                    msg += f"⭐ score: {score}\n{link}"
 
                     send(msg)
 
                 seen.add(link)
 
-                count += 1
+        save_seen(seen)
 
-                if count >= 5:
-                    break
-
-    save_seen(seen)
-
-
+# 🔥 KLUCZ: działa non-stop
 if __name__ == "__main__":
-    run()
+    while True:
+        run()
+        time.sleep(30)
